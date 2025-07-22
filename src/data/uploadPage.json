@@ -1,0 +1,23 @@
+{
+  "tabs": ["Early View", "Mid-term Analysis", "Quarterly Review", "Annual Projection"],
+  "cards": [
+    {
+      "type": "team",
+      "title": "Company Timesheet",
+      "description": "Upload team timesheet data with hours logged by associates",
+      "icon": "📊"
+    },
+    {
+      "type": "customer",
+      "title": "Client Timesheet Dump",
+      "description": "Upload customer-provided timesheet data for validation",
+      "icon": "👥"
+    },
+    {
+      "type": "associateMapping",
+      "title": "Associate Mapping",
+      "description": "Upload associate mapping data for reconciliation purposes",
+      "icon": "🔗"
+    }
+  ]
+}

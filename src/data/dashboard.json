@@ -1,0 +1,63 @@
+{
+  "header": {
+    "title": "PMO Dashboard",
+    "subtitle": "Project Management Office – Central Command"
+  },
+  "metrics": [
+    { "value": "28",   "label": "ACTIVE PROJECTS" },
+    { "value": "94%",  "label": "ON-TIME DELIVERY" },
+    { "value": "$2.4M","label": "BUDGET MANAGED" },
+    { "value": "156",  "label": "TEAM MEMBERS" }
+  ],
+  "cards": [
+    {
+      "title": "Financial Management",
+      "description": "Manage budgets, track financial goals",
+      "icon": "💰"
+    },
+    {
+      "title": "Invoice Processing & Approval",
+      "description": "Handle and approve client invoices",
+      "icon": "🧾"
+    },
+    {
+      "title": "Contract & Compliance",
+      "description": "Monitor contract milestones and policies",
+      "icon": "📜"
+    },
+    {
+      "title": "Resource Management",
+      "description": "Oversee resource allocation and staffing",
+      "icon": "👥"
+    },
+    {
+      "title": "Revenue Forecast",
+      "description": "Predict revenue trends based on data",
+      "icon": "📈"
+    }
+  ],
+  "accountOptions": {
+    "Liverpool FC":        ["Website Redesign", "Fan Engagement Platform"],
+    "Adobe Systems":       ["Creative Cloud Update", "Mobile App Development"],
+    "Tesla Inc.":          ["Battery Optimization"]
+  },
+  "revenuePopup": {
+    "title":   "Choose an Action",
+    "buttons": [
+      { "text": "Upload Timesheet",  "action": "upload",       "variant": "primary" },
+      { "text": "View Past Data",    "action": "viewPastData", "variant": "info"    },
+      { "text": "Cancel",            "action": "cancel",       "variant": "secondary" }
+    ]
+  },
+  "viewPastDataPopup": {
+    "title":             "Select Month and Year to View Past Data",
+    "alertMessage":      "Please select both a month and a year to View Past Data.",
+    "goButtonText":      "Go",
+    "cancelButtonText":  "Cancel",
+    "dateFormat":        "MM/yyyy",
+    "placeholderText":   "Select Month & Year"
+  },
+  "messageBox": {
+    "closeText": "Close"
+  }
+}
