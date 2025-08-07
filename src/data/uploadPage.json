@@ -14,6 +14,12 @@
       "icon": "👥"
     },
     {
+      "type": "forecastRevenue",
+      "title": "Forecast Revenue",
+      "description": "Upload projected revenue data for future periods",
+      "icon": "📈"
+    },
+    {
       "type": "associateMapping",
       "title": "Associate Mapping",
       "description": "Upload associate mapping data for reconciliation purposes",
