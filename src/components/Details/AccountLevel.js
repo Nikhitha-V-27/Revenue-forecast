@@ -218,6 +218,7 @@ const AccountLevel = () => {
   // Dynamic breadcrumb path
   const breadcrumbPath = [
     { name: 'PMO Dashboard', page: '' }, // Always starts with Dashboard
+    { name: 'Revenue Forecast - Early View', page: 'upload' }, // Added this line
     ...(activeSbu ? [{ name: `${activeSbu} SBU Level`, page: 'sbu' }] : []), // Conditionally add SBU Level
     { name: 'Account Level', page: 'accounts' },
   ].filter(Boolean); // Filter out any null/undefined entries if activeSbu is not set
@@ -309,7 +310,6 @@ const AccountLevel = () => {
                       <button
                         className="btn btn-sm btn-outline-primary rounded-circle"
                         onClick={() =>
-                          // Navigate to ProjectTypeLevel instead of ProjectLevel
                           navigate(`/accounts/${acc.accountId}/project-types`, {
                             state: {
                               accId: acc.accountId, // Ensure accId is passed for ProjectTypeLevel
@@ -320,6 +320,7 @@ const AccountLevel = () => {
                             },
                           })
                         }
+                        title="View Project Types"
                       >
                         🔍
                       </button>

@@ -8,18 +8,27 @@ import {
   Button
 } from 'react-bootstrap';
 import { useLocation, useNavigate } from 'react-router-dom';
-import Breadcrumbs from '../Breadcrumbs';
-import commonData from '../../data/commonData.json';
+import Breadcrumbs from '../Breadcrumbs'; // Assuming this path is correct
+import commonData from '../../data/commonData.json'; // Assuming this path is correct
 
 const ProjectTypeLevel = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { accId, month, year, sbu } = location.state || {};
+
+  // State variables for active filters
+  const [activeAccId, setActiveAccId] = useState(null);
+  const [activeMonth, setActiveMonth] = useState(null);
+  const [activeYear, setActiveYear] = useState(null);
+  const [activeSbu, setActiveSbu] = useState(null);
 
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // Define BACKEND_URL here, inside the component
+  const BACKEND_URL = 'http://localhost:8081';
+
+  // Currency settings from commonData
   const {
     locale,
     currency,
@@ -27,6 +36,7 @@ const ProjectTypeLevel = () => {
     maximumFractionDigits
   } = commonData.currencySettings;
 
+  // Initialize Intl.NumberFormat for currency formatting
   const formatter = new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,
@@ -34,61 +44,148 @@ const ProjectTypeLevel = () => {
     maximumFractionDigits
   });
 
+  // Helper to format values, handling exponent strings and currency
   const formatValue = (val, columnName) => {
     if (typeof val === 'string') {
-      const m = val.match(/^e(\d+)$/i);
+      const m = val.match(/^e(\d+)$/i); // Check for "eX" format
       if (m) {
-        val = Math.pow(10, Number(m[1]));
+        val = Math.pow(10, Number(m[1])); // Convert "eX" to 10^X
       } else if (!isNaN(val)) {
-        val = Number(val);
+        val = Number(val); // Convert string numbers to actual numbers
       }
     }
 
+    // Format as currency if it's a finite number and the specific column
     if (typeof val === 'number' && isFinite(val) && columnName === 'totalRevenueByType') {
       return formatter.format(val);
     }
-    return val;
+    return val; // Return original value if not a number or not meant for currency formatting
   };
 
+  // Helper to get month name from month number
   const getMonthName = (m) =>
-    new Date(year, m - 1).toLocaleString('en-US', { month: 'long' });
+    new Date(activeYear, m - 1).toLocaleString('en-US', { month: 'long' }); // Use activeYear here
 
+  // Load Poppins font from Google Fonts (good practice for consistent styling)
   useEffect(() => {
-    if (!accId || !month || !year) {
-      setError('Missing Account ID, month, or year. Please navigate here with those parameters.');
-      setLoading(false);
-      return;
-    }
+    const link = document.createElement('link');
+    link.href = 'https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap';
+    link.rel = 'stylesheet';
+    document.head.appendChild(link);
+    document.body.style.fontFamily = "'Poppins', sans-serif";
+  }, []);
 
-    const fetchProjectTypeData = async () => {
+  // Fetch Project Type data when activeAccId, activeMonth, activeYear change
+  useEffect(() => {
+    const fetchProjectTypeData = async (accIdToUse, monthToUse, yearToUse) => {
       setLoading(true);
-      setError('');
+      setError(''); // Clear any previous errors
       try {
         const payload = {
-          accId: accId,
-          month: Number(month),
-          year: Number(year)
+          accId: accIdToUse,
+          month: Number(monthToUse),
+          year: Number(yearToUse)
         };
         const resp = await axios.post(
-          'http://localhost:8081/api/project-type-level',
+          `${BACKEND_URL}/api/project-type-level`, // API endpoint for Project Type data
           payload
         );
-        setData(resp.data);
+        setData(resp.data); // Set fetched data to state
       } catch (err) {
-        setError(err.response?.data || err.message);
+        // Handle API errors
+        console.error("Error fetching Project Type data:", err);
+        setError(err.response?.data || err.message || 'Failed to fetch project type data.');
       } finally {
-        setLoading(false);
+        setLoading(false); // Deactivate loading spinner
       }
     };
 
-    fetchProjectTypeData();
-  }, [accId, month, year]);
+    // Determine context from location.state, sessionStorage, or URL query params
+    let accIdCandidate = location.state?.accId;
+    let monthCandidate = location.state?.month;
+    let yearCandidate = location.state?.year;
+    let sbuCandidate = location.state?.sbu;
 
+    // Fallback to sessionStorage if not in location.state
+    if (!accIdCandidate) accIdCandidate = sessionStorage.getItem('lastFetchedProjectTypeAccId');
+    if (!monthCandidate) monthCandidate = sessionStorage.getItem('lastFetchedProjectTypeMonth');
+    if (!yearCandidate) yearCandidate = sessionStorage.getItem('lastFetchedProjectTypeYear');
+    if (!sbuCandidate) sbuCandidate = sessionStorage.getItem('lastFetchedProjectTypeSbu');
+
+    // Fallback to URL query parameters if not in sessionStorage (less common for this level, but good for robustness)
+    const qs = new URLSearchParams(location.search);
+    if (!accIdCandidate) accIdCandidate = qs.get('accId');
+    if (!monthCandidate) monthCandidate = qs.get('month');
+    if (!yearCandidate) yearCandidate = qs.get('year');
+    if (!sbuCandidate) sbuCandidate = qs.get('sbu');
+
+    // Convert numeric values to integers
+    monthCandidate = monthCandidate ? parseInt(monthCandidate, 10) : null;
+    yearCandidate = yearCandidate ? parseInt(yearCandidate, 10) : null;
+
+    // Only proceed if all essential parameters are valid
+    if (accIdCandidate && monthCandidate && yearCandidate) {
+      // Check if context has actually changed to avoid unnecessary re-fetches
+      if (
+        accIdCandidate !== activeAccId ||
+        monthCandidate !== activeMonth ||
+        yearCandidate !== activeYear ||
+        sbuCandidate !== activeSbu || // Include sbu in re-fetch condition
+        data.length === 0 // Re-fetch if data is empty (e.g., first load)
+      ) {
+        setActiveAccId(accIdCandidate);
+        setActiveMonth(monthCandidate);
+        setActiveYear(yearCandidate);
+        setActiveSbu(sbuCandidate);
+
+        // Persist context to sessionStorage for future loads
+        sessionStorage.setItem('lastFetchedProjectTypeAccId', accIdCandidate);
+        sessionStorage.setItem('lastFetchedProjectTypeMonth', monthCandidate.toString());
+        sessionStorage.setItem('lastFetchedProjectTypeYear', yearCandidate.toString());
+        if (sbuCandidate) {
+          sessionStorage.setItem('lastFetchedProjectTypeSbu', sbuCandidate);
+        }
+
+        fetchProjectTypeData(accIdCandidate, monthCandidate, yearCandidate);
+      } else {
+        setLoading(false); // Context hasn't changed, data already loaded
+      }
+    } else {
+      // If essential context is missing after all checks, set error
+      setError('Missing Account ID, month, or year. Please navigate here with those parameters.');
+      setLoading(false);
+    }
+  }, [
+    location.state,
+    location.search,
+    activeAccId,
+    activeMonth,
+    activeYear,
+    activeSbu, // Add activeSbu to dependencies
+    data.length,
+    BACKEND_URL
+  ]);
+
+  // Dynamically determine table columns based on the first data item
+  // Filters out specific fields if they are not meant for direct display
   const columns = data.length
-    ? Object.keys(data[0]).filter((col) => col.toLowerCase() !== 'id')
+    ? Object.keys(data[0]).filter((col) => col.toLowerCase() !== 'id' && col.toLowerCase() !== 'accountid' && col.toLowerCase() !== 'month' && col.toLowerCase() !== 'year')
     : [];
 
-  const headerCols = [...columns, 'View'];
+  // Append a 'View' column to the headers for navigation
+  const headerCols = [...columns, 'View Projects'];
+
+  // Define breadcrumb path
+  const breadcrumbPath = [
+    { name: 'PMO Dashboard', page: '' }, // Navigates to root (e.g., your main dashboard)
+    { name: 'Revenue Forecast - Early View', page: 'upload' }, // Navigates to the upload page
+    // Conditionally add SBU Level if activeSbu is available
+    ...(activeSbu ? [{ name: `${activeSbu} SBU Level`, page: 'sbu', state: { month: activeMonth, year: activeYear, sbu: activeSbu } }] : []),
+    // Account Level breadcrumb, passing necessary state back to AccountLevel
+    { name: 'Account Level', page: `accounts`, state: { month: activeMonth, year: activeYear, sbu: activeSbu } },
+    // Current page breadcrumb (name changed to "Project Type")
+    { name: `Project Type`, page: `accounts/${activeAccId}/project-types` } // No need to pass state to itself here
+  ].filter(Boolean); // Filter out any null/undefined entries if 'sbu' is not set
 
   return (
     <div
@@ -106,25 +203,18 @@ const ProjectTypeLevel = () => {
           borderRadius: '1rem',
         }}
       >
-        <Breadcrumbs path={[
-          { name: 'SBU Level', page: 'sbu' },
-          { name: 'Account Level', page: `accounts` },
-          { name: 'Project Type Level', page: `accounts/${accId}/project-types` }
-        ]} />
+        {/* Breadcrumbs component */}
+        <Breadcrumbs path={breadcrumbPath} />
 
-        <Button variant="link" className="ps-0 mb-4" onClick={() => navigate(-1)}>
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="feather feather-chevron-left me-2">
-            <polyline points="15 18 9 12 15 6"></polyline>
-          </svg>
-                 </Button>
-
+        {/* Page title */}
         <h2 className="text-center mb-4 fw-semibold text-dark">
-          📊 Project Type Overview for Account {accId}{' '}
+          📊 Project Type Overview for Account {activeAccId}{' '}
           <span className="text-primary">
-            ({getMonthName(month)} {year})
+            ({getMonthName(activeMonth)} {activeYear})
           </span>
         </h2>
 
+        {/* Conditional rendering for loading, error, or data display */}
         {loading ? (
           <div className="d-flex justify-content-center align-items-center my-5">
             <Spinner animation="border" role="status" className="me-2" />
@@ -135,59 +225,71 @@ const ProjectTypeLevel = () => {
             <p className="fs-4">Error: {error}</p>
             <button
               className="btn btn-primary mt-3"
-              onClick={() => navigate('/accounts', { state: { month, year, sbu } })}
+              onClick={() => navigate('/accounts', { state: { month: activeMonth, year: activeYear, sbu: activeSbu } })} // Navigate back to Account Level with state
             >
               Go to Account Level
             </button>
           </div>
         ) : (
-          <div className="table-responsive rounded">
-            <table
-              className="display table table-hover align-middle table-bordered mb-0"
-              style={{ width: '100%' }}
-            >
-              <thead
-                className="text-white"
-                style={{
-                  background: 'linear-gradient(to right, #1d4ed8, #2563eb)',
-                }}
+          data.length === 0 ? (
+            <div className="text-center text-muted py-5">
+              <p className="fs-5">No Project Type data available for Account {activeAccId} in {getMonthName(activeMonth)} {activeYear}.</p>
+              <p>Please ensure data has been uploaded for this period.</p>
+            </div>
+          ) : (
+            <div className="table-responsive rounded">
+              <Table
+                hover
+                bordered
+                className="align-middle mb-0"
+                style={{ width: '100%' }}
               >
-                <tr>
-                  {headerCols.map((col) => (
-                    <th key={col}>{col}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {data.map((row, idx) => (
-                  <tr key={idx}>
-                    {columns.map((col) => (
-                      <td key={col}>{formatValue(row[col], col)}</td>
+                <thead
+                  className="text-white"
+                  style={{
+                    background: 'linear-gradient(to right, #1d4ed8, #2563eb)',
+                  }}
+                >
+                  <tr>
+                    {headerCols.map((col) => (
+                      <th key={col}>{col}</th>
                     ))}
-                    <td className="text-center">
-                      <Button
-                        size="sm"
-                        variant="primary"
-                        onClick={() =>
-                          navigate(`/accounts/${accId}/projects`, {
-                            state: {
-                              accId,
-                              month,
-                              year,
-                              sbu,
-                              projectType: row.projectType
-                            }
-                          })
-                        }
-                      >
-                        View
-                      </Button>
-                    </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {data.map((row, idx) => (
+                    <tr key={idx}>
+                      {columns.map((col) => (
+                        <td key={col}>{formatValue(row[col], col)}</td>
+                      ))}
+                      <td className="text-center">
+                        {/* Button to navigate to Project Level for the specific Project Type */}
+                        <Button
+                          size="sm"
+                          variant="outline-primary"
+                          className="rounded-circle"
+                          onClick={() =>
+                            navigate(`/accounts/${activeAccId}/projects`, {
+                              state: {
+                                accId: activeAccId, // Pass activeAccId
+                                month: activeMonth, // Pass activeMonth
+                                year: activeYear,   // Pass activeYear
+                                sbu: activeSbu,     // Pass activeSbu
+                                projectType: row.projectType // Pass the project type for filtering at the Project Level
+                              }
+                            })
+                          }
+                          title={`View Projects for ${row.projectType || 'this type'}`}
+                        >
+                          🔍
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </div>
+          )
         )}
       </div>
     </div>

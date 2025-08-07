@@ -3,13 +3,12 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import $ from 'jquery';
 import 'datatables.net';
 import 'datatables.net-dt/css/dataTables.dataTables.min.css';
-// Assuming Breadcrumbs and commonData are available in the correct relative paths
-// import Breadcrumbs from '../Breadcrumbs'; // Uncomment if you have this component
-// import commonData from '../../data/commonData.json'; // Uncomment if you have this file
+import Breadcrumbs from '../Breadcrumbs'; // Assuming this path is correct
+import commonData from '../../data/commonData.json'; // Assuming this path is correct
 
 const ProjectLevel = () => {
   const navigate = useNavigate();
-  const { accountId: urlAccountId } = useParams();
+  const { accountId: urlAccountId } = useParams(); // accountId from URL path
   const location = useLocation();
   const tableRef = useRef(null);
 
@@ -20,39 +19,12 @@ const ProjectLevel = () => {
   const [activeYear, setActiveYear] = useState(null);
   const [activeAccountId, setActiveAccountId] = useState(null);
   const [activeAccountName, setActiveAccountName] = useState('Loading...');
+  const [activeSbu, setActiveSbu] = useState(null);
+  const [activeProjectType, setActiveProjectType] = useState(null);
+
 
   // Backend URL for API calls
   const BACKEND_URL = 'http://localhost:8081';
-
-  // Mock commonData and Breadcrumbs if not available, for standalone execution
-  // In a real project, ensure these imports are correct.
-  const commonData = {
-    currencySettings: {
-      locale: 'en-US',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }
-  };
-
-  const Breadcrumbs = ({ path }) => (
-    <nav aria-label="breadcrumb" className="mb-4">
-      <ol className="breadcrumb">
-        {path.map((item, index) => (
-          <li key={index} className={`breadcrumb-item ${index === path.length - 1 ? 'active' : ''}`}>
-            {item.page ? (
-              <a href={`#${item.page}`} className="text-decoration-none text-primary">
-                {item.name}
-              </a>
-            ) : (
-              item.name
-            )}
-          </li>
-        ))}
-      </ol>
-    </nav>
-  );
-
 
   // Currency formatting function
   const formatCurrency = (value = 0) =>
@@ -63,12 +35,67 @@ const ProjectLevel = () => {
       maximumFractionDigits: commonData.currencySettings.maximumFractionDigits
     });
 
-  // Placeholder download logic
+  // Utility to get month name (for file naming)
+  const getMonthName = (monthNumber) => {
+    if (!monthNumber) return '';
+    const date = new Date();
+    date.setMonth(monthNumber - 1);
+    return date.toLocaleString('en-US', { month: 'long' });
+  };
+
+  /**
+   * Handles the "Download Data" button click.
+   * Generates a CSV file from the 'projects' data and triggers a download.
+   */
   const handleDownloadData = () => {
-    // In a real application, replace this with actual CSV/Excel download logic
-    console.log('Download Project Data button clicked!');
-    // Example: Trigger a backend endpoint to generate and download a file
-    // window.open(`${BACKEND_URL}/api/download-projects?month=${activeMonth}&year=${activeYear}&accountId=${activeAccountId}`);
+    if (projects.length === 0) {
+      console.log('No data to download.');
+      return;
+    }
+
+    // Define CSV headers matching the table columns
+    const headers = [
+      "Project ID", "Project Name", "Total Associates", "Company Hours",
+      "Client Hours", "Variance Hours", "Revenue"
+    ];
+
+    // Map project data to CSV rows
+    const csvRows = projects.map(project => {
+      return [
+        `"${project.projectId}"`, // Enclose in quotes to handle commas if any
+        `"${project.projectName}"`,
+        project.totalAssociatesCount,
+        project.totalCompanyHours,
+        project.totalClientHours,
+        project.varianceHours,
+        `"${formatCurrency(project.revenue)}"` // Format currency and enclose in quotes
+      ].join(','); // Join values with a comma
+    });
+
+    // Combine headers and rows
+    const csvContent = [
+      headers.join(','), // Join headers with a comma
+      ...csvRows
+    ].join('\n'); // Join rows with a newline character
+
+    // Create a Blob from the CSV content
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+
+    // Create a download link and trigger the download
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+
+    // Generate a dynamic filename
+    const monthName = getMonthName(activeMonth);
+    const fileName = `Projects_Account_${activeAccountId}_${monthName}_${activeYear}.csv`;
+
+    link.setAttribute('href', url);
+    link.setAttribute('download', fileName);
+    link.style.visibility = 'hidden'; // Hide the link
+    document.body.appendChild(link); // Append to body
+    link.click(); // Programmatically click the link to trigger download
+    document.body.removeChild(link); // Clean up
+    URL.revokeObjectURL(url); // Release the object URL
   };
 
   // Load Poppins font from Google Fonts
@@ -80,18 +107,18 @@ const ProjectLevel = () => {
     document.body.style.fontFamily = "'Poppins', sans-serif";
   }, []);
 
-  // Fetch project data when context (month, year, accountId) changes
+  // Fetch project data when context (month, year, accountId, projectType) changes
   useEffect(() => {
-    const fetchProjectData = async (month, year, accId) => {
+    const fetchProjectData = async (month, year, accId, projectType) => {
       setLoading(true);
       setError(null);
 
       try {
+        const payload = { month, year, accId, projectType };
         const resp = await fetch(`${BACKEND_URL}/api/project`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          // IMPORTANT: Added projectType to the request body as per API requirement
-          body: JSON.stringify({ month, year, accId, projectType: "BTM" })
+          body: JSON.stringify(payload)
         });
 
         if (!resp.ok) {
@@ -100,7 +127,6 @@ const ProjectLevel = () => {
         }
 
         const data = await resp.json();
-        // Ensure data is always an array for consistent processing
         const list = Array.isArray(data) ? data : [data].filter(Boolean);
         setProjects(list);
 
@@ -122,23 +148,23 @@ const ProjectLevel = () => {
     // Determine context from location.state, URL params, or sessionStorage
     let monthToUse = location.state?.month;
     let yearToUse = location.state?.year;
-    let accountIdToUse = urlAccountId; // From URL params
+    let accountIdToUse = urlAccountId; // Always from URL params for this component
     let accountNameToUse = location.state?.accountName;
+    let sbuToUse = location.state?.sbu;
+    let projectTypeToUse = location.state?.projectType;
 
-    // If context is missing from location.state, try sessionStorage
-    if (!monthToUse || !yearToUse || !accountIdToUse) {
-      const sm = sessionStorage.getItem('lastFetchedProjectMonth');
-      const sy = sessionStorage.getItem('lastFetchedProjectYear');
-      const sa = sessionStorage.getItem('lastFetchedProjectAccountId');
-      const san = sessionStorage.getItem('lastFetchedProjectAccountName');
+    // Prioritize sessionStorage for all parameters if not in location.state
+    // This makes the context retrieval more robust
+    if (!monthToUse) monthToUse = sessionStorage.getItem('lastFetchedProjectMonth');
+    if (!yearToUse) yearToUse = sessionStorage.getItem('lastFetchedProjectYear');
+    // accountIdToUse is primarily from useParams (urlAccountId)
+    if (!accountNameToUse) accountNameToUse = sessionStorage.getItem('lastFetchedProjectAccountName');
+    if (!sbuToUse) sbuToUse = sessionStorage.getItem('lastFetchedProjectSbu');
+    if (!projectTypeToUse) projectTypeToUse = sessionStorage.getItem('lastFetchedProjectType');
 
-      if (sm && sy && sa) {
-        monthToUse = parseInt(sm, 10);
-        yearToUse = parseInt(sy, 10);
-        accountIdToUse = sa;
-        accountNameToUse = san;
-      }
-    }
+    // Convert to number
+    monthToUse = monthToUse ? parseInt(monthToUse, 10) : null;
+    yearToUse = yearToUse ? parseInt(yearToUse, 10) : null;
 
     // Only fetch data if all necessary context is available and it's a new context
     if (monthToUse && yearToUse && accountIdToUse) {
@@ -146,6 +172,8 @@ const ProjectLevel = () => {
         monthToUse !== activeMonth ||
         yearToUse !== activeYear ||
         accountIdToUse !== activeAccountId ||
+        sbuToUse !== activeSbu ||
+        projectTypeToUse !== activeProjectType ||
         projects.length === 0 // Re-fetch if projects array is empty (e.g., first load)
       ) {
         setActiveMonth(monthToUse);
@@ -154,6 +182,8 @@ const ProjectLevel = () => {
         if (accountNameToUse) {
           setActiveAccountName(accountNameToUse);
         }
+        setActiveSbu(sbuToUse);
+        setActiveProjectType(projectTypeToUse);
 
         // Persist context to sessionStorage for future loads
         sessionStorage.setItem('lastFetchedProjectMonth', monthToUse.toString());
@@ -162,15 +192,19 @@ const ProjectLevel = () => {
         if (accountNameToUse) {
           sessionStorage.setItem('lastFetchedProjectAccountName', accountNameToUse);
         }
+        if (sbuToUse) {
+          sessionStorage.setItem('lastFetchedProjectSbu', sbuToUse);
+        }
+        if (projectTypeToUse) {
+          sessionStorage.setItem('lastFetchedProjectType', projectTypeToUse);
+        }
 
-        fetchProjectData(monthToUse, yearToUse, accountIdToUse);
+        fetchProjectData(monthToUse, yearToUse, accountIdToUse, projectTypeToUse);
       } else {
-        // If context hasn't changed and projects are already loaded, just set loading to false
         setLoading(false);
       }
     } else {
-      // If essential context is missing, show an error
-      setError('Missing project context (month, year, or account ID). Please go back.');
+      setError('Missing month, year, or Account ID. Please navigate here with all parameters.');
       setLoading(false);
     }
   }, [
@@ -179,30 +213,27 @@ const ProjectLevel = () => {
     activeMonth,
     activeYear,
     activeAccountId,
-    projects.length // Include projects.length to trigger re-fetch if data is cleared
+    activeSbu,
+    activeProjectType,
+    projects.length
   ]);
 
   // Initialize and destroy DataTable when projects data changes or component unmounts
   useEffect(() => {
     if (!loading && projects.length > 0 && tableRef.current) {
       const $tbl = $(tableRef.current);
-      // Destroy existing DataTable instance if it exists
       if ($.fn.DataTable.isDataTable($tbl)) {
         $tbl.DataTable().destroy();
       }
-      // Initialize new DataTable instance
       $tbl.DataTable({
         paging: true,
         searching: true,
         ordering: true,
         info: true,
-        autoWidth: false,
-        // Responsive options for DataTables (requires DataTables Responsive extension)
-        // responsive: true
+        autoWidth: false
       });
     }
 
-    // Cleanup function to destroy DataTable when component unmounts or dependencies change
     return () => {
       if (tableRef.current) {
         const $tbl = $(tableRef.current);
@@ -211,18 +242,23 @@ const ProjectLevel = () => {
         }
       }
     };
-  }, [loading, projects]); // Re-run effect when loading or projects data changes
+  }, [loading, projects]);
 
   // Define breadcrumb path for navigation
   const breadcrumbPath = [
     { name: 'PMO Dashboard', page: '' },
     { name: 'Revenue Forecast - Early View', page: 'upload' },
-    { name: 'Account Level', page: 'accounts' },
+    // Conditionally add SBU Level
+    ...(activeSbu ? [{ name: `${activeSbu} SBU Level`, page: 'sbu', state: { month: activeMonth, year: activeYear, sbu: activeSbu } }] : []),
+    // Account Level breadcrumb
+    { name: 'Account Level', page: `accounts`, state: { month: activeMonth, year: activeYear, sbu: activeSbu } },
+    // Conditionally add Project Type breadcrumb (name changed to "Project Type")
+    ...(activeProjectType ? [{ name: `${activeProjectType} Project Type`, page: `accounts/${activeAccountId}/project-types`, state: { month: activeMonth, year: activeYear, sbu: activeSbu, accId: activeAccountId } }] : []),
     {
       name: `Projects (${activeAccountName})`,
       page: `accounts/${activeAccountId}/projects`
     }
-  ];
+  ].filter(Boolean);
 
   // Render loading state
   if (loading) {
@@ -241,7 +277,7 @@ const ProjectLevel = () => {
         <p className="fs-4">Error: {error}</p>
         <button
           className="btn btn-primary mt-3"
-          onClick={() => navigate('/accounts')} // Navigate back to account level
+          onClick={() => navigate('/accounts', { state: { month: activeMonth, year: activeYear, sbu: activeSbu } })}
         >
           Go to Account Level
         </button>
@@ -300,8 +336,6 @@ const ProjectLevel = () => {
               <tr>
                 <th>Project ID</th>
                 <th>Project Name</th>
-                {/* <th>Account ID</th>
-                <th>Account Name</th> */}
                 <th>Total Associates</th>
                 <th>Company Hours</th>
                 <th>Client Hours</th>
@@ -316,8 +350,6 @@ const ProjectLevel = () => {
                 <tr key={project.projectId}>
                   <td>{project.projectId}</td>
                   <td>{project.projectName}</td>
-                  {/* <td>{project.accountId}</td>
-                  <td>{project.accountName}</td> */}
                   <td>{project.totalAssociatesCount}</td>
                   <td>{project.totalCompanyHours}</td>
                   <td>{project.totalClientHours}</td>
@@ -337,7 +369,9 @@ const ProjectLevel = () => {
                               accountId: project.accountId,
                               accountName: project.accountName,
                               month: activeMonth,
-                              year: activeYear
+                              year: activeYear,
+                              sbu: activeSbu,
+                              projectType: activeProjectType
                             }
                           }
                         )

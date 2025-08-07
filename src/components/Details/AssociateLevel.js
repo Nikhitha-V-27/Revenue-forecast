@@ -3,7 +3,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import $ from 'jquery';
 import 'datatables.net';
 import 'datatables.net-dt/css/dataTables.dataTables.min.css';
-import { Bell, Download, Search, Filter } from 'lucide-react';
+import { Bell, Download, Search } from 'lucide-react';
 import Breadcrumbs from '../Breadcrumbs';
 import commonData from '../../data/commonData.json';
 import * as XLSX from 'xlsx';
@@ -25,6 +25,8 @@ const AssociateLevel = () => {
   const [activeProjectName, setActiveProjectName] = useState('Loading...');
   const [activeAccountId, setActiveAccountId] = useState(null);
   const [activeAccountName, setActiveAccountName] = useState('Loading...');
+  const [activeSbu, setActiveSbu] = useState(null);
+  const [activeProjectType, setActiveProjectType] = useState(null);
   const [filterOption, setFilterOption] = useState('showAll');
 
   const BACKEND_URL = 'http://localhost:8081';
@@ -44,6 +46,7 @@ const AssociateLevel = () => {
       maximumFractionDigits,
     });
 
+  // Load Poppins font
   useEffect(() => {
     const link = document.createElement('link');
     link.href =
@@ -53,6 +56,7 @@ const AssociateLevel = () => {
     document.body.style.fontFamily = "'Poppins', sans-serif";
   }, []);
 
+  // Fetch associate data when context changes
   useEffect(() => {
     const fetchAssociateData = async (month, year, projId) => {
       setLoading(true);
@@ -87,52 +91,63 @@ const AssociateLevel = () => {
       }
     };
 
-    let month = location.state?.month;
-    let year = location.state?.year;
-    let projId = urlProjectId;
-    let acctId = location.state?.accountId;
-    let acctName = location.state?.accountName;
-    let projName = location.state?.projectName;
+    // Determine context from location.state, URL params, or sessionStorage
+    let monthToUse = location.state?.month;
+    let yearToUse = location.state?.year;
+    let projIdToUse = urlProjectId;
+    let projNameToUse = location.state?.projectName;
+    let acctIdToUse = location.state?.accountId;
+    let acctNameToUse = location.state?.accountName;
+    let sbuToUse = location.state?.sbu;
+    let projectTypeToUse = location.state?.projectType;
 
-    if (!month || !year || !acctId || !projName) {
-      const sm = sessionStorage.getItem('lastFetchedAssociateMonth');
-      const sy = sessionStorage.getItem('lastFetchedAssociateYear');
-      const sp = sessionStorage.getItem('lastFetchedAssociateProjectId');
-      const sn = sessionStorage.getItem('lastFetchedAssociateProjectName');
-      const sa = sessionStorage.getItem('lastFetchedAssociateAccountId');
-      const san = sessionStorage.getItem('lastFetchedAssociateAccountName');
-      if (sm && sy && sp) {
-        month = parseInt(sm, 10);
-        year = parseInt(sy, 10);
-        projId = sp;
-        projName = sn;
-        acctId = sa;
-        acctName = san;
-      }
-    }
+    // Fallback to sessionStorage if not in location.state
+    if (!monthToUse) monthToUse = sessionStorage.getItem('lastFetchedAssociateMonth');
+    if (!yearToUse) yearToUse = sessionStorage.getItem('lastFetchedAssociateYear');
+    if (!projNameToUse) projNameToUse = sessionStorage.getItem('lastFetchedAssociateProjectName');
+    if (!acctIdToUse) acctIdToUse = sessionStorage.getItem('lastFetchedAssociateAccountId');
+    if (!acctNameToUse) acctNameToUse = sessionStorage.getItem('lastFetchedAssociateAccountName');
+    if (!sbuToUse) sbuToUse = sessionStorage.getItem('lastFetchedAssociateSbu');
+    if (!projectTypeToUse) projectTypeToUse = sessionStorage.getItem('lastFetchedAssociateProjectType');
 
-    if (month && year && projId && acctId && projName) {
+    // Convert to number
+    monthToUse = monthToUse ? parseInt(monthToUse, 10) : null;
+    yearToUse = yearToUse ? parseInt(yearToUse, 10) : null;
+
+    // Only fetch data if all necessary context is available and it's a new context
+    if (monthToUse && yearToUse && projIdToUse && acctIdToUse && projNameToUse) {
       if (
-        month !== activeMonth ||
-        year !== activeYear ||
-        projId !== activeProjectId ||
+        monthToUse !== activeMonth ||
+        yearToUse !== activeYear ||
+        projIdToUse !== activeProjectId ||
+        sbuToUse !== activeSbu ||
+        projectTypeToUse !== activeProjectType ||
         associates.length === 0
       ) {
-        setActiveMonth(month);
-        setActiveYear(year);
-        setActiveProjectId(projId);
-        setActiveProjectName(projName);
-        setActiveAccountId(acctId);
-        setActiveAccountName(acctName);
+        setActiveMonth(monthToUse);
+        setActiveYear(yearToUse);
+        setActiveProjectId(projIdToUse);
+        setActiveProjectName(projNameToUse);
+        setActiveAccountId(acctIdToUse);
+        setActiveAccountName(acctNameToUse);
+        setActiveSbu(sbuToUse);
+        setActiveProjectType(projectTypeToUse);
 
-        sessionStorage.setItem('lastFetchedAssociateMonth', month.toString());
-        sessionStorage.setItem('lastFetchedAssociateYear', year.toString());
-        sessionStorage.setItem('lastFetchedAssociateProjectId', projId);
-        sessionStorage.setItem('lastFetchedAssociateProjectName', projName);
-        sessionStorage.setItem('lastFetchedAssociateAccountId', acctId);
-        sessionStorage.setItem('lastFetchedAssociateAccountName', acctName);
+        // Persist context to sessionStorage for future loads
+        sessionStorage.setItem('lastFetchedAssociateMonth', monthToUse.toString());
+        sessionStorage.setItem('lastFetchedAssociateYear', yearToUse.toString());
+        sessionStorage.setItem('lastFetchedAssociateProjectId', projIdToUse);
+        sessionStorage.setItem('lastFetchedAssociateProjectName', projNameToUse);
+        sessionStorage.setItem('lastFetchedAssociateAccountId', acctIdToUse);
+        sessionStorage.setItem('lastFetchedAssociateAccountName', acctNameToUse);
+        if (sbuToUse) {
+          sessionStorage.setItem('lastFetchedAssociateSbu', sbuToUse);
+        }
+        if (projectTypeToUse) {
+          sessionStorage.setItem('lastFetchedAssociateProjectType', projectTypeToUse);
+        }
 
-        fetchAssociateData(month, year, projId);
+        fetchAssociateData(monthToUse, yearToUse, projIdToUse);
       } else {
         setLoading(false);
       }
@@ -148,9 +163,12 @@ const AssociateLevel = () => {
     activeMonth,
     activeYear,
     activeProjectId,
+    activeSbu,
+    activeProjectType,
     associates.length,
   ]);
 
+  // DataTable initialization and destruction
   useEffect(() => {
     if (!loading && tableRef.current) {
       const $tbl = $(tableRef.current);
@@ -162,7 +180,9 @@ const AssociateLevel = () => {
 
       if (filterOption === 'varianceAboveZero') {
         $.fn.dataTable.ext.search.push((settings, data, dataIndex) => {
-          const varianceHoursMonthly = parseFloat(data[7]) || 0;
+          // Access the raw data object from the associates array
+          const associate = associates[dataIndex];
+          const varianceHoursMonthly = parseFloat(associate.varianceHoursMonthly) || 0;
           return varianceHoursMonthly !== 0;
         });
       }
@@ -178,7 +198,99 @@ const AssociateLevel = () => {
           search: 'Search:',
           lengthMenu: 'Show _MENU_ entries',
         },
+        // Define columns for DataTables to correctly map data from objects
+        columns: [
+          { data: 'associateId' },
+          { data: 'associateName' },
+          { data: 'projectId' },
+          { data: 'projectName' },
+          { data: 'esaID' },
+          { data: 'totalCompanyHoursMonthly' },
+          { data: 'totalClientHoursMonthly' },
+          { // Custom rendering for Variance Hours (Monthly)
+            data: 'varianceHoursMonthly',
+            render: function (data, type, row) {
+              if (type === 'display' || type === 'filter') {
+                const variance = parseFloat(data) || 0;
+                let className = 'bg-slate-100 text-slate-700';
+                if (variance > 0) {
+                  className = 'bg-red-100 text-red-800';
+                } else if (variance < 0) {
+                  className = 'bg-green-100 text-green-800';
+                }
+                return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${className}">${data}</span>`;
+              }
+              return data; // For sorting/type, return raw data
+            }
+          },
+          {
+            data: 'actualRevenue',
+            render: function (data, type, row) {
+              return type === 'display' ? formatCurrency(data) : data;
+            }
+          },
+          {
+            data: 'associateRtRate',
+            render: function (data, type, row) {
+              return type === 'display' ? formatCurrency(data) : data;
+            }
+          },
+          { // Notify button column
+            data: null, // No direct data source
+            className: 'text-center',
+            orderable: false, // Not sortable
+            render: function (data, type, row) {
+              return `
+                <button class="btn btn-sm btn-outline-info rounded-lg px-3 py-1 d-flex align-items-center text-blue-600 border-blue-200 hover:bg-blue-50 transition-colors notify-btn">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-bell me-1"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg> Notify
+                </button>
+              `;
+            }
+          },
+          { // View Daily button column
+            data: null, // No direct data source
+            className: 'text-center',
+            orderable: false, // Not sortable
+            render: function (data, type, row) {
+              return `
+                <button class="btn btn-sm btn-outline-primary rounded-full p-2 d-flex align-items-center justify-content-center text-blue-600 border-blue-200 hover:bg-blue-50 transition-colors view-daily-btn">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-search"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                </button>
+              `;
+            }
+          }
+        ],
+        data: associates // Pass the associates array directly to DataTables
       });
+
+      // Attach event listeners for dynamically created buttons
+      $tbl.on('click', '.notify-btn', function() {
+        const rowData = dataTableInstance.current.row($(this).parents('tr')).data();
+        console.log('Notify clicked for:', rowData.associateName);
+        handleNotifyAssociate(rowData.associateId); // Call a handler for individual notify
+      });
+
+      $tbl.on('click', '.view-daily-btn', function() {
+        const rowData = dataTableInstance.current.row($(this).parents('tr')).data();
+        navigate(
+          `/projects/${rowData.projectId}/associates/${rowData.associateId}/daily`,
+          {
+            state: {
+              month: activeMonth,
+              year: activeYear,
+              projectId: rowData.projectId,
+              projectName: rowData.projectName,
+              accountId: activeAccountId,
+              accountName: activeAccountName,
+              associateId: rowData.associateId,
+              associateName: rowData.associateName,
+              sbu: activeSbu,
+              projectType: activeProjectType
+            },
+          }
+        );
+      });
+
     }
 
     return () => {
@@ -187,35 +299,54 @@ const AssociateLevel = () => {
         dataTableInstance.current = null;
       }
       $.fn.dataTable.ext.search.pop();
+      // Remove event listeners to prevent memory leaks
+      $(tableRef.current).off('click', '.notify-btn');
+      $(tableRef.current).off('click', '.view-daily-btn');
     };
-  }, [loading, associates, filterOption]);
+  }, [loading, associates, filterOption, navigate, activeMonth, activeYear, activeAccountId, activeAccountName, activeSbu, activeProjectType]); // Added all necessary dependencies
 
+  // Define breadcrumb path for navigation
   const breadcrumbPath = [
     { name: 'PMO Dashboard', page: '' },
     { name: 'Revenue Forecast - Early View', page: 'upload' },
-    { name: 'Account Level', page: 'accounts' },
+    ...(activeSbu ? [{ name: `${activeSbu} SBU Level`, page: 'sbu', state: { month: activeMonth, year: activeYear, sbu: activeSbu } }] : []),
+    { name: 'Account Level', page: `accounts`, state: { month: activeMonth, year: activeYear, sbu: activeSbu } },
+    ...(activeProjectType ? [{ name: `${activeProjectType} Project Type`, page: `accounts/${activeAccountId}/project-types`, state: { month: activeMonth, year: activeYear, sbu: activeSbu, accId: activeAccountId } }] : []),
     {
       name: `Projects (${activeAccountName})`,
       page: `accounts/${activeAccountId}/projects`,
+      state: { month: activeMonth, year: activeYear, sbu: activeSbu, accId: activeAccountId, accountName: activeAccountName, projectType: activeProjectType }
     },
     {
       name: `Associates (${activeProjectName})`,
       page: `projects/${activeProjectId}/associates`,
     },
-  ];
+  ].filter(Boolean);
 
   const handleNotifyAll = () => {
     console.log('Notifying all associates for this project!');
   };
 
-  const handleDownloadData = () => {
-    // 1. Get ALL filtered data from DataTables (across all pages)
-    const filteredData = dataTableInstance.current
-      .rows({ search: 'applied' }) // Removed 'page: "current"'
-      .data()
-      .toArray();
+  // New handler for individual associate notification (can be expanded)
+  const handleNotifyAssociate = (associateId) => {
+    console.log(`Notifying associate with ID: ${associateId}`);
+    // Implement actual notification logic here (e.g., API call)
+  };
 
-    // 2. Define the headers for the Excel file
+  const handleDownloadData = () => {
+    // Apply the DataTables search filter to the raw 'associates' array first
+    // This ensures that only currently filtered data is downloaded
+    let dataToExport = associates;
+    if (filterOption === 'varianceAboveZero') {
+        dataToExport = associates.filter(associate => (parseFloat(associate.varianceHoursMonthly) || 0) !== 0);
+    }
+
+    if (dataToExport.length === 0) {
+      console.log('No data to download after applying filters.');
+      return;
+    }
+
+    // Define the headers for the Excel file
     const headers = [
       'Associate ID',
       'Associate Name',
@@ -229,34 +360,34 @@ const AssociateLevel = () => {
       'Associate Rate',
     ];
 
-    // 3. Prepare the data in a format suitable for XLSX
-    const dataForExcel = filteredData.map((row) => ({
-      'Associate ID': row[0],
-      'Associate Name': row[1],
-      'Project ID': row[2],
-      'Project Name': row[3],
-      'PM ID': row[4],
-      'Total Company Hours (Monthly)': row[5],
-      'Total Client Hours (Monthly)': row[6],
-      'Variance Hours (Monthly)': row[7],
-      'Actual Revenue': row[8],
-      'Associate Rate': row[9],
+    // Prepare the data in a format suitable for XLSX
+    const dataForExcel = dataToExport.map((associate) => ({
+      'Associate ID': associate.associateId,
+      'Associate Name': associate.associateName,
+      'Project ID': associate.projectId,
+      'Project Name': associate.projectName,
+      'PM ID': associate.esaID,
+      'Total Company Hours (Monthly)': associate.totalCompanyHoursMonthly,
+      'Total Client Hours (Monthly)': associate.totalClientHoursMonthly,
+      'Variance Hours (Monthly)': associate.varianceHoursMonthly, // Direct access to number
+      'Actual Revenue': formatCurrency(associate.actualRevenue), // Format here for Excel
+      'Associate Rate': formatCurrency(associate.associateRtRate), // Format here for Excel
     }));
 
-    // 4. Create a new workbook and a worksheet
+    // Create a new workbook and a worksheet
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(dataForExcel, { header: headers });
 
-    // 5. Add the worksheet to the workbook
+    // Add the worksheet to the workbook
     XLSX.utils.book_append_sheet(wb, ws, 'Associate Data');
 
-    // 6. Generate the Excel file
+    // Generate the Excel file
     const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     const dataBlob = new Blob([excelBuffer], {
       type: 'application/octet-stream',
     });
 
-    // 7. Save the file using file-saver
+    // Save the file using file-saver
     const filename = `Associate_Data_${activeProjectName}_${activeMonth}-${activeYear}.xlsx`;
     saveAs(dataBlob, filename);
 
@@ -282,7 +413,16 @@ const AssociateLevel = () => {
         <p className="fs-4 text-red-600 font-semibold">Error: {error}</p>
         <button
           className="btn btn-primary mt-3 px-4 py-2 rounded-lg shadow-md hover:shadow-lg transition-all"
-          onClick={() => navigate(`/accounts/${activeAccountId}/projects`)}
+          onClick={() => navigate(`/accounts/${activeAccountId}/projects`, {
+            state: {
+              month: activeMonth,
+              year: activeYear,
+              accId: activeAccountId,
+              accountName: activeAccountName,
+              sbu: activeSbu,
+              projectType: activeProjectType
+            }
+          })}
         >
           Go to Project Level
         </button>
@@ -319,15 +459,14 @@ const AssociateLevel = () => {
                 htmlFor="varianceFilter"
                 className="form-label mb-0 me-2 fw-semibold text-slate-700 text-nowrap"
               >
-                <Filter className="inline-block me-1 text-blue-500" size={18} />{' '}
-                Filter
+                Sort
               </label>
               <select
                 id="varianceFilter"
                 className="form-select rounded-lg px-3 py-2 shadow-sm border border-slate-300 focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50 transition-all"
                 value={filterOption}
                 onChange={handleFilterChange}
-                style={{ minWidth: '180px' }}
+                style={{ minWidth: '220px' }}
               >
                 <option value="showAll">Show All Variance</option>
                 <option value="varianceAboveZero">Variance not 0</option>
@@ -464,6 +603,8 @@ const AssociateLevel = () => {
                               accountName: activeAccountName,
                               associateId: associate.associateId,
                               associateName: associate.associateName,
+                              sbu: activeSbu,
+                              projectType: activeProjectType
                             },
                           }
                         );
