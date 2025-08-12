@@ -176,6 +176,85 @@ const AccountLevel = () => {
     };
   }, [loading, accounts]);
 
+  // Download Excel (.xls) of current table view (respects DataTables filters/search)
+  const handleDownloadExcel = () => {
+    const $tbl = $(tableRef.current);
+    let headers = [
+      'Account ID',
+      'Account Name',
+      'Total Projects',
+      'Total Revenue',
+      'Forecast Revenue',
+      'Revenue Difference',
+    ];
+    let rows = [];
+
+    if ($.fn.DataTable.isDataTable($tbl)) {
+      const dt = $tbl.DataTable();
+
+      // Read headers (first 6 columns)
+      headers = $tbl
+        .find('thead th')
+        .slice(0, 6)
+        .map(function () {
+          return $(this).text().trim();
+        })
+        .get();
+
+      // Read visible rows (filtered) and grab displayed text for first 6 cells
+      const nodes = dt.rows({ search: 'applied' }).nodes().toArray();
+      rows = nodes.map((tr) =>
+        Array.from(tr.cells)
+          .slice(0, 6)
+          .map((td) => td.textContent.trim())
+      );
+    } else {
+      // Fallback: build from state
+      rows = accounts.map((acc) => [
+        String(acc.accountId ?? ''),
+        String(acc.accountName ?? ''),
+        String(acc.totalProjects ?? ''),
+        formatCurrency(acc.totalRevenue ?? 0),
+        formatCurrency(acc.forecastNetRevenue ?? 0),
+        formatCurrency(acc.difference ?? 0),
+      ]);
+    }
+
+    // Build simple HTML table which Excel can open as .xls
+    const theadHtml =
+      '<tr>' + headers.map((h) => `<th>${h.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</th>`).join('') + '</tr>';
+    const tbodyHtml = rows
+      .map(
+        (r) =>
+          '<tr>' +
+          r
+            .map((v) => `<td>${String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;')}</td>`)
+            .join('') +
+          '</tr>'
+      )
+      .join('');
+
+    const html =
+      `<html xmlns:o="urn:schemas-microsoft-com:office:office" ` +
+      `xmlns:x="urn:schemas-microsoft-com:office:excel" ` +
+      `xmlns="http://www.w3.org/TR/REC-html40">` +
+      `<head><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets>` +
+      `<x:ExcelWorksheet><x:Name>AccountLevel</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>` +
+      `</x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>` +
+      `<body><table border="1"><thead>${theadHtml}</thead><tbody>${tbodyHtml}</tbody></table></body></html>`;
+
+    const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const fileName = `AccountLevel_${activeSbu || 'All'}_${activeMonthName || ''}${activeYear || ''}.xls`;
+    a.href = url;
+    a.download = fileName.replace(/\s+/g, '_');
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   // Open comment modal
   const openCommentModal = (accId) => {
     setCurrentAccountId(accId);
@@ -217,11 +296,11 @@ const AccountLevel = () => {
 
   // Dynamic breadcrumb path
   const breadcrumbPath = [
-    { name: 'PMO Dashboard', page: '' }, // Always starts with Dashboard
-    { name: 'Revenue Forecast - Early View', page: 'upload' }, // Added this line
-    ...(activeSbu ? [{ name: `${activeSbu} SBU Level`, page: 'sbu' }] : []), // Conditionally add SBU Level
+    { name: 'PMO Dashboard', page: '' },
+    { name: 'Revenue Forecast - Early View', page: 'upload' },
+    ...(activeSbu ? [{ name: `${activeSbu} SBU Level`, page: 'sbu' }] : []),
     { name: 'Account Level', page: 'accounts' },
-  ].filter(Boolean); // Filter out any null/undefined entries if activeSbu is not set
+  ].filter(Boolean);
 
   return (
     <div
@@ -241,14 +320,26 @@ const AccountLevel = () => {
       >
         <Breadcrumbs path={breadcrumbPath} />
 
-        <h2 className="text-center mb-4 fw-semibold text-dark">
-          🏢 Account Level Overview – {activeSbu}
-          {activeMonthName && activeYear && (
-            <span className="ms-2 text-primary">
-              ({activeMonthName} {activeYear})
-            </span>
-          )}
-        </h2>
+        <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-3">
+          <h2 className="mb-3 mb-md-0 fw-semibold text-dark">
+            🏢 Account Level Overview – {activeSbu}
+            {activeMonthName && activeYear && (
+              <span className="ms-2 text-primary">
+                ({activeMonthName} {activeYear})
+              </span>
+            )}
+          </h2>
+          <button
+            type="button"
+            onClick={handleDownloadExcel}
+            disabled={loading || !!error}
+            title="Download current table view as Excel"
+            className="btn"
+            style={{ backgroundColor: '#ffffff', border: '1px solid #198754', color: '#198754' }}
+          >
+            Download
+          </button>
+        </div>
 
         {loading ? (
           <div className="d-flex justify-content-center align-items-center">
@@ -312,7 +403,7 @@ const AccountLevel = () => {
                         onClick={() =>
                           navigate(`/accounts/${acc.accountId}/project-types`, {
                             state: {
-                              accId: acc.accountId, // Ensure accId is passed for ProjectTypeLevel
+                              accId: acc.accountId,
                               month: activeMonth,
                               year: activeYear,
                               monthName: activeMonthName,

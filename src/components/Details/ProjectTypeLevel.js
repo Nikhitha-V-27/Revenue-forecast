@@ -44,6 +44,16 @@ const ProjectTypeLevel = () => {
     maximumFractionDigits
   });
 
+  // Define a map for column names to display names (camelCase to readable)
+  const columnNameMap = {
+    projectType: 'Project Type',
+    totalRevenueByType: 'Total Revenue by Type',
+    totalProjectsInType: 'Total Projects by Type',
+    // Add other mappings as needed if your DTO has more fields
+    // For example:
+    // someOtherCamelCaseField: 'Some Other Display Field',
+  };
+
   // Helper to format values, handling exponent strings and currency
   const formatValue = (val, columnName) => {
     if (typeof val === 'string') {
@@ -172,8 +182,11 @@ const ProjectTypeLevel = () => {
     ? Object.keys(data[0]).filter((col) => col.toLowerCase() !== 'id' && col.toLowerCase() !== 'accountid' && col.toLowerCase() !== 'month' && col.toLowerCase() !== 'year')
     : [];
 
+  // Map the raw column names to their display names using columnNameMap
+  const mappedColumns = columns.map(col => columnNameMap[col] || col);
+
   // Append a 'View' column to the headers for navigation
-  const headerCols = [...columns, 'View Projects'];
+  const headerCols = [...mappedColumns, 'View Projects'];
 
   // Define breadcrumb path
   const breadcrumbPath = [

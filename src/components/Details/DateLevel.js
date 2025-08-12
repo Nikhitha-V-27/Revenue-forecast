@@ -10,15 +10,14 @@ const DateLevel = () => {
   const navigate = useNavigate();
   const { projectId: urlProjectId, associateId: urlAssociateId } = useParams();
   const location = useLocation();
-
   const tableRef = useRef(null);
-  const dataTableInstance = useRef(null);
-  const hasFetchedRef = useRef(false); // Prevent multiple API calls
+  const dataTableInstance = useRef(null); // Ref to hold the DataTable instance
 
   const [dailyHours, setDailyHours] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Active context states, initialized to null or 'Loading...' for immediate feedback
   const [activeMonth, setActiveMonth] = useState(null);
   const [activeYear, setActiveYear] = useState(null);
   const [activeProjectId, setActiveProjectId] = useState(null);
@@ -32,7 +31,7 @@ const DateLevel = () => {
 
   const BACKEND_URL = 'http://localhost:8081';
 
-  // Currency formatter
+  // Currency formatter from commonData.json
   const {
     locale,
     currency,
@@ -57,12 +56,9 @@ const DateLevel = () => {
     document.body.style.fontFamily = "'Poppins', sans-serif";
   }, []);
 
-  // Fetch daily hours data (guarded by hasFetchedRef)
+  // Effect to determine context from various sources and trigger data fetch
   useEffect(() => {
-    if (hasFetchedRef.current) return;
-    hasFetchedRef.current = true;
-
-    const fetchDailyHoursData = async (month, year, projId, assocId) => {
+    const fetchDailyHoursData = async (month, year, projId, assocId, currentProjectName, currentAssociateName, currentAccountName, currentAccountId) => {
       setLoading(true);
       setError(null);
       try {
@@ -79,94 +75,92 @@ const DateLevel = () => {
         const list = Array.isArray(data) ? data : [data].filter(Boolean);
         setDailyHours(list);
 
+        // Update ProjectName, AssociateName, AccountName from fetched data if more specific,
+        // otherwise retain values passed from navigation/session storage.
         if (list.length > 0) {
-          setActiveProjectName(list[0].projectName || projId);
-          setActiveAssociateName(list[0].associateName || assocId);
-          setActiveAccountName(list[0].accountName || activeAccountName);
-          setActiveAccountId(list[0].accountId || activeAccountId);
+          setActiveProjectName(list[0].projectName || currentProjectName || projId);
+          setActiveAssociateName(list[0].associateName || currentAssociateName || assocId);
+          setActiveAccountName(list[0].accountName || currentAccountName || 'Unknown Account');
+          setActiveAccountId(list[0].accountId || currentAccountId);
+        } else {
+          // If no data, ensure names are still set to the best available context or 'N/A'
+          setActiveProjectName(currentProjectName || 'N/A');
+          setActiveAssociateName(currentAssociateName || 'N/A');
+          setActiveAccountName(currentAccountName || 'N/A');
+          setActiveAccountId(currentAccountId); // Keep account ID from context
         }
       } catch (err) {
         console.error('Error fetching daily hours data:', err);
         setError(`Failed to load daily hours data: ${err.message}`);
+        setActiveProjectName('Error');
+        setActiveAssociateName('Error');
+        setActiveAccountName('Error');
       } finally {
         setLoading(false);
       }
     };
 
-    // Derive context from location.state, URL params, or sessionStorage
-    let monthToUse = location.state?.month;
-    let yearToUse = location.state?.year;
-    let projectIdToUse = urlProjectId;
-    let associateIdToUse = urlAssociateId;
-    let projectNameToUse = location.state?.projectName;
-    let associateNameToUse = location.state?.associateName;
-    let accountIdToUse = location.state?.accountId;
-    let accountNameToUse = location.state?.accountName;
-    let sbuToUse = location.state?.sbu;
-    let projectTypeToUse = location.state?.projectType;
+    // Derive values from location.state, URL params, or sessionStorage
+    let monthToUse = location.state?.month || sessionStorage.getItem('lastFetchedDateMonth');
+    let yearToUse = location.state?.year || sessionStorage.getItem('lastFetchedDateYear');
+    let projectIdToUse = urlProjectId || sessionStorage.getItem('lastFetchedDateProjectId');
+    let associateIdToUse = urlAssociateId || sessionStorage.getItem('lastFetchedDateAssociateId');
+    let projectNameToUse = location.state?.projectName || sessionStorage.getItem('lastFetchedDateProjectName');
+    let associateNameToUse = location.state?.associateName || sessionStorage.getItem('lastFetchedDateAssociateName');
+    let accountIdToUse = location.state?.accountId || sessionStorage.getItem('lastFetchedDateAccountId');
+    let accountNameToUse = location.state?.accountName || sessionStorage.getItem('lastFetchedDateAccountName');
+    let sbuToUse = location.state?.sbu || sessionStorage.getItem('lastFetchedDateSbu');
+    let projectTypeToUse = location.state?.projectType || sessionStorage.getItem('lastFetchedDateProjectType');
 
-    if (!monthToUse)   monthToUse   = sessionStorage.getItem('lastFetchedDateMonth');
-    if (!yearToUse)    yearToUse    = sessionStorage.getItem('lastFetchedDateYear');
-    if (!projectNameToUse) projectNameToUse = sessionStorage.getItem('lastFetchedDateProjectName');
-    if (!associateNameToUse) associateNameToUse = sessionStorage.getItem('lastFetchedDateAssociateName');
-    if (!accountIdToUse) accountIdToUse = sessionStorage.getItem('lastFetchedDateAccountId');
-    if (!accountNameToUse) accountNameToUse = sessionStorage.getItem('lastFetchedDateAccountName');
-    if (!sbuToUse)     sbuToUse     = sessionStorage.getItem('lastFetchedDateSbu');
-    if (!projectTypeToUse) projectTypeToUse = sessionStorage.getItem('lastFetchedDateProjectType');
-
+    // Convert numeric values to integers
     monthToUse = monthToUse ? parseInt(monthToUse, 10) : null;
-    yearToUse  = yearToUse  ? parseInt(yearToUse, 10) : null;
+    yearToUse = yearToUse ? parseInt(yearToUse, 10) : null;
 
-    // Only fetch if context is valid
-    if (
-      monthToUse &&
-      yearToUse &&
-      projectIdToUse &&
-      associateIdToUse &&
-      projectNameToUse &&
-      associateNameToUse &&
-      accountIdToUse &&
-      accountNameToUse
-    ) {
-      // Check for context change
-      if (
-        monthToUse !== activeMonth ||
-        yearToUse !== activeYear ||
-        projectIdToUse !== activeProjectId ||
-        associateIdToUse !== activeAssociateId ||
-        accountIdToUse !== activeAccountId ||
-        sbuToUse !== activeSbu ||
-        projectTypeToUse !== activeProjectType
-      ) {
-        setActiveMonth(monthToUse);
-        setActiveYear(yearToUse);
-        setActiveProjectId(projectIdToUse);
-        setActiveAssociateId(associateIdToUse);
-        setActiveProjectName(projectNameToUse);
-        setActiveAssociateName(associateNameToUse);
-        setActiveAccountId(accountIdToUse);
-        setActiveAccountName(accountNameToUse);
-        setActiveSbu(sbuToUse);
-        setActiveProjectType(projectTypeToUse);
+    // Update active states immediately. This makes sure breadcrumbs have values
+    // as soon as possible, even before the data fetch completes.
+    setActiveMonth(monthToUse);
+    setActiveYear(yearToUse);
+    setActiveProjectId(projectIdToUse);
+    setActiveAssociateId(associateIdToUse);
+    // Use the derived names for initial state, falling back to 'Loading...' or context
+    setActiveProjectName(projectNameToUse || 'Loading...');
+    setActiveAssociateName(associateNameToUse || 'Loading...');
+    setActiveAccountId(accountIdToUse);
+    setActiveAccountName(accountNameToUse || 'Loading...');
+    setActiveSbu(sbuToUse);
+    setActiveProjectType(projectTypeToUse);
 
-        sessionStorage.setItem('lastFetchedDateMonth', monthToUse.toString());
-        sessionStorage.setItem('lastFetchedDateYear', yearToUse.toString());
-        sessionStorage.setItem('lastFetchedDateProjectId', projectIdToUse);
-        sessionStorage.setItem('lastFetchedDateAssociateId', associateIdToUse);
-        sessionStorage.setItem('lastFetchedDateProjectName', projectNameToUse);
-        sessionStorage.setItem('lastFetchedDateAssociateName', associateNameToUse);
-        sessionStorage.setItem('lastFetchedDateAccountId', accountIdToUse);
-        sessionStorage.setItem('lastFetchedDateAccountName', accountNameToUse);
-        if (sbuToUse) {
-          sessionStorage.setItem('lastFetchedDateSbu', sbuToUse);
-        }
-        if (projectTypeToUse) {
-          sessionStorage.setItem('lastFetchedDateProjectType', projectTypeToUse);
-        }
+    // Persist context to sessionStorage for future loads
+    if (monthToUse) sessionStorage.setItem('lastFetchedDateMonth', monthToUse.toString());
+    if (yearToUse) sessionStorage.setItem('lastFetchedDateYear', yearToUse.toString());
+    if (projectIdToUse) sessionStorage.setItem('lastFetchedDateProjectId', projectIdToUse);
+    if (associateIdToUse) sessionStorage.setItem('lastFetchedDateAssociateId', associateIdToUse);
+    if (projectNameToUse) sessionStorage.setItem('lastFetchedDateProjectName', projectNameToUse);
+    if (associateNameToUse) sessionStorage.setItem('lastFetchedDateAssociateName', associateNameToUse);
+    if (accountIdToUse) sessionStorage.setItem('lastFetchedDateAccountId', accountIdToUse);
+    if (accountNameToUse) sessionStorage.setItem('lastFetchedDateAccountName', accountNameToUse);
+    if (sbuToUse) {
+      sessionStorage.setItem('lastFetchedDateSbu', sbuToUse);
+    }
+    if (projectTypeToUse) {
+      sessionStorage.setItem('lastFetchedDateProjectType', projectTypeToUse);
+    }
 
-        fetchDailyHoursData(monthToUse, yearToUse, projectIdToUse, associateIdToUse);
+    // Only fetch data if all necessary core context is available
+    const contextChanged =
+      monthToUse !== activeMonth ||
+      yearToUse !== activeYear ||
+      projectIdToUse !== activeProjectId ||
+      associateIdToUse !== activeAssociateId ||
+      accountIdToUse !== activeAccountId || // Also check accountId changes
+      sbuToUse !== activeSbu || // Also check SBU changes
+      projectTypeToUse !== activeProjectType; // Also check Project Type changes
+
+    if (monthToUse && yearToUse && projectIdToUse && associateIdToUse && projectNameToUse && associateNameToUse && accountIdToUse && accountNameToUse) {
+      if (contextChanged || dailyHours.length === 0) { // Re-fetch if context changed or data is empty
+        fetchDailyHoursData(monthToUse, yearToUse, projectIdToUse, associateIdToUse, projectNameToUse, associateNameToUse, accountNameToUse, accountIdToUse);
       } else {
-        setLoading(false);
+        setLoading(false); // Context hasn't changed, data already loaded
       }
     } else {
       setError('Missing daily hours context. Please go back and select an associate.');
@@ -176,27 +170,29 @@ const DateLevel = () => {
     location.state,
     urlProjectId,
     urlAssociateId,
+    // Include all 'active' context states that drive the fetch logic in dependencies
     activeMonth,
     activeYear,
     activeProjectId,
     activeAssociateId,
-    activeAccountId,
-    activeSbu,
-    activeProjectType
+    activeAccountId, // Important: Include if it affects data fetching or the fetch trigger
+    activeSbu, // Important: Include if it affects data fetching or the fetch trigger
+    activeProjectType, // Important: Include if it affects data fetching or the fetch trigger
+    dailyHours.length // Keep this if you want to re-fetch if data array becomes empty
   ]);
 
-  // Initialize & update DataTable
+  // Initialize DataTable once and update data when it changes
   useEffect(() => {
     const tableEl = tableRef.current;
 
-    if (tableEl && !dataTableInstance.current) {
+    if (tableEl && !dataTableInstance.current) { // Initialize only if not already initialized
       dataTableInstance.current = $(tableEl).DataTable({
         paging: true,
         searching: true,
         ordering: true,
         info: true,
         autoWidth: false,
-        data: dailyHours,
+        data: dailyHours, // Initial data
         columns: [
           { data: 'date' },
           { data: 'associateId' },
@@ -205,14 +201,19 @@ const DateLevel = () => {
           { data: 'projectName' },
           { data: 'companyHours' },
           { data: 'clientHours' },
-          {
+          { // Custom rendering for Variance Time Units
             data: 'varianceTimeUnits',
-            render: (data, type, row) => {
+            render: function (data, type, row) {
+              // Calculate variance if varianceTimeUnits is null/undefined
               const variance = data != null ? data : row.companyHours - row.clientHours;
               let className = '';
-              if (variance > 0) className = 'text-danger';
-              else if (variance < 0) className = 'text-primary';
-              else className = 'text-success';
+              if (variance > 0) {
+                className = 'text-danger';
+              } else if (variance < 0) {
+                className = 'text-primary';
+              } else {
+                className = 'text-success';
+              }
               return `<span class="fw-semibold ${className}">${variance}</span>`;
             }
           },
@@ -220,51 +221,32 @@ const DateLevel = () => {
         ]
       });
     } else if (dataTableInstance.current && !loading) {
+      // Update data if DataTable is already initialized and loading is complete
       dataTableInstance.current.clear().rows.add(dailyHours).draw();
     }
 
+    // Cleanup function to destroy DataTable when component unmounts
     return () => {
       if (dataTableInstance.current) {
         dataTableInstance.current.destroy();
         dataTableInstance.current = null;
       }
     };
-  }, [loading, dailyHours]);
+  }, [loading, dailyHours]); // Dependencies for DataTable effect
 
-  // Build breadcrumb path
+  // Define breadcrumb path for navigation
   const breadcrumbPath = [
     { name: 'PMO Dashboard', page: '' },
     { name: 'Revenue Forecast - Early View', page: 'upload' },
-    ...(activeSbu
-      ? [
-          {
-            name: `${activeSbu} SBU Level`,
-            page: 'sbu',
-            state: { month: activeMonth, year: activeYear, sbu: activeSbu }
-          }
-        ]
-      : []),
+    // Conditionally add SBU Level
+    ...(activeSbu ? [{ name: `${activeSbu} SBU Level`, page: 'sbu', state: { month: activeMonth, year: activeYear, sbu: activeSbu } }] : []),
+    // Account Level breadcrumb
+    { name: 'Account Level', page: `accounts`, state: { month: activeMonth, year: activeYear, sbu: activeSbu } },
+    // Conditionally add Project Type breadcrumb
+    ...(activeProjectType ? [{ name: `${activeProjectType} Project Type`, page: `accounts/${activeAccountId}/project-types`, state: { month: activeMonth, year: activeYear, sbu: activeSbu, accId: activeAccountId } }] : []),
+    // Project Level breadcrumb, passing all necessary state back
     {
-      name: 'Account Level',
-      page: `accounts`,
-      state: { month: activeMonth, year: activeYear, sbu: activeSbu }
-    },
-    ...(activeProjectType
-      ? [
-          {
-            name: `${activeProjectType} Project Type`,
-            page: `accounts/${activeAccountId}/project-types`,
-            state: {
-              month: activeMonth,
-              year: activeYear,
-              sbu: activeSbu,
-              accId: activeAccountId
-            }
-          }
-        ]
-      : []),
-    {
-      name: `Projects (${activeAccountName})`,
+      name: `Project Level (${activeAccountName || 'Loading...'})`, // Ensure activeAccountName is used
       page: `accounts/${activeAccountId}/projects`,
       state: {
         month: activeMonth,
@@ -275,8 +257,9 @@ const DateLevel = () => {
         projectType: activeProjectType
       }
     },
+    // Associate Level breadcrumb, passing all necessary state back
     {
-      name: `Associates (${activeProjectName})`,
+      name: `Associates (${activeProjectName || 'Loading...'})`, // Ensure activeProjectName is used
       page: `projects/${activeProjectId}/associates`,
       state: {
         month: activeMonth,
@@ -289,11 +272,12 @@ const DateLevel = () => {
         projectType: activeProjectType
       }
     },
+    // Current page breadcrumb
     {
-      name: `Daily View (${activeAssociateName})`,
+      name: `Daily View (${activeAssociateName || 'Loading...'})`, // Ensure activeAssociateName is used
       page: `projects/${activeProjectId}/associates/${activeAssociateId}/daily`
     }
-  ].filter(Boolean);
+  ].filter(Boolean); // Filter out any null/undefined entries
 
   if (loading) {
     return (
@@ -310,20 +294,18 @@ const DateLevel = () => {
         <p className="fs-4">Error: {error}</p>
         <button
           className="btn btn-primary mt-3"
-          onClick={() =>
-            navigate(`/projects/${activeProjectId}/associates`, {
-              state: {
-                month: activeMonth,
-                year: activeYear,
-                projectId: activeProjectId,
-                projectName: activeProjectName,
-                accountId: activeAccountId,
-                accountName: activeAccountName,
-                sbu: activeSbu,
-                projectType: activeProjectType
-              }
-            })
-          }
+          onClick={() => navigate(`/projects/${activeProjectId}/associates`, {
+            state: {
+              month: activeMonth,
+              year: activeYear,
+              projectId: activeProjectId,
+              projectName: activeProjectName,
+              accountId: activeAccountId,
+              accountName: activeAccountName,
+              sbu: activeSbu,
+              projectType: activeProjectType
+            }
+          })}
         >
           Go to Associate Level
         </button>
@@ -377,7 +359,9 @@ const DateLevel = () => {
                 <th>Comparison Result</th>
               </tr>
             </thead>
-            <tbody />
+            <tbody>
+              {/* DataTables will manage rendering the tbody content, so this map is removed */}
+            </tbody>
           </table>
         </div>
       </div>
