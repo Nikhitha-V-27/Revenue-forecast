@@ -3,12 +3,15 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import $ from 'jquery';
 import 'datatables.net';
 import 'datatables.net-dt/css/dataTables.dataTables.min.css';
-import Breadcrumbs from '../Breadcrumbs'; // Assuming this path is correct
-import commonData from '../../data/commonData.json'; // Assuming this path is correct
+import Breadcrumbs from '../Breadcrumbs';
+import commonData from '../../data/commonData.json';
+
+// Declare the BACKEND_URL constant at the top level
+const BACKEND_URL = 'http://localhost:8081';
 
 const ProjectLevel = () => {
   const navigate = useNavigate();
-  const { accountId: urlAccountId } = useParams(); // accountId from URL path
+  const { accountId: urlAccountId } = useParams();
   const location = useLocation();
   const tableRef = useRef(null);
 
@@ -22,9 +25,8 @@ const ProjectLevel = () => {
   const [activeSbu, setActiveSbu] = useState(null);
   const [activeProjectType, setActiveProjectType] = useState(null);
 
-
-  // Backend URL for API calls
-  const BACKEND_URL = 'http://localhost:8081';
+  // State to manage column filters
+  const [columnFilters, setColumnFilters] = useState({});
 
   // Currency formatting function
   const formatCurrency = (value = 0) =>
@@ -59,43 +61,94 @@ const ProjectLevel = () => {
       "Client Hours", "Variance Hours", "Revenue"
     ];
 
-    // Map project data to CSV rows
-    const csvRows = projects.map(project => {
+    // Map projects data to CSV rows, using the currently filtered projects
+    const csvRows = applyFilters(projects, columnFilters).map(project => {
       return [
-        `"${project.projectId}"`, // Enclose in quotes to handle commas if any
+        `"${project.projectId}"`,
         `"${project.projectName}"`,
         project.totalAssociatesCount,
         project.totalCompanyHours,
         project.totalClientHours,
         project.varianceHours,
-        `"${formatCurrency(project.revenue)}"` // Format currency and enclose in quotes
-      ].join(','); // Join values with a comma
+        `"${formatCurrency(project.revenue)}"`
+      ].join(',');
     });
 
-    // Combine headers and rows
     const csvContent = [
-      headers.join(','), // Join headers with a comma
+      headers.join(','),
       ...csvRows
-    ].join('\n'); // Join rows with a newline character
+    ].join('\n');
 
-    // Create a Blob from the CSV content
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-
-    // Create a download link and trigger the download
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
-
-    // Generate a dynamic filename
     const monthName = getMonthName(activeMonth);
     const fileName = `Projects_Account_${activeAccountId}_${monthName}_${activeYear}.csv`;
-
     link.setAttribute('href', url);
     link.setAttribute('download', fileName);
-    link.style.visibility = 'hidden'; // Hide the link
-    document.body.appendChild(link); // Append to body
-    link.click(); // Programmatically click the link to trigger download
-    document.body.removeChild(link); // Clean up
-    URL.revokeObjectURL(url); // Release the object URL
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  /**
+   * Generates a unique list of options for a given column key.
+   * @param {string} columnKey The key of the column to get unique values for.
+   * @returns {string[]} An array of unique values, including an 'All' option.
+   */
+  const getUniqueOptions = (columnKey) => {
+    // Only use the raw projects data to get the full list of options
+    const options = projects.map(project => project[columnKey]);
+    const uniqueOptions = [...new Set(options)].sort();
+    return ['All', ...uniqueOptions];
+  };
+
+  /**
+   * Handles changes to a column's filter dropdown.
+   * Updates the `columnFilters` state with the new value.
+   * @param {string} columnKey The key of the column being filtered.
+   * @param {string} value The selected filter value.
+   */
+  const handleFilterChange = (columnKey, value) => {
+    setColumnFilters(prevFilters => ({
+      ...prevFilters,
+      [columnKey]: value === 'All' ? null : value
+    }));
+  };
+
+  /**
+   * Filters the projects array based on the current columnFilters state.
+   * This is used for the download functionality to get the currently filtered data.
+   * DataTables handles the actual table filtering.
+   * @param {Array} projectsArray The array of projects to filter.
+   * @param {Object} filters The object containing column filters.
+   * @returns {Array} The filtered array of projects.
+   */
+  const applyFilters = (projectsArray, filters) => {
+    return projectsArray.filter(project => {
+      return Object.keys(filters).every(columnKey => {
+        const filterValue = filters[columnKey];
+        if (filterValue === null || filterValue === undefined) {
+          return true; // No filter applied for this column
+        }
+
+        const projectValue = project[columnKey];
+        if (projectValue === null || projectValue === undefined) {
+          return false; // Cannot match if project value is null/undefined
+        }
+
+        // Handle numeric and string comparisons
+        if (typeof projectValue === 'number' && !Number.isNaN(Number(filterValue))) {
+          // Strict equality for numbers
+          return projectValue === Number(filterValue);
+        }
+
+        // Case-insensitive string comparison for others
+        return String(projectValue).toLowerCase() === String(filterValue).toLowerCase();
+      });
+    });
   };
 
   // Load Poppins font from Google Fonts
@@ -129,13 +182,13 @@ const ProjectLevel = () => {
         const data = await resp.json();
         const list = Array.isArray(data) ? data : [data].filter(Boolean);
         setProjects(list);
+        setColumnFilters({}); // Reset filters when new data is fetched
 
-        // Derive accountName from response or sessionStorage
         if (list.length > 0 && list[0].accountName) {
           setActiveAccountName(list[0].accountName);
         } else {
           const storedName = sessionStorage.getItem('lastFetchedProjectAccountName');
-          setActiveAccountName(storedName || accId); // Fallback to accountId if name not found
+          setActiveAccountName(storedName || accId);
         }
       } catch (e) {
         console.error('Error fetching project data:', e);
@@ -145,36 +198,29 @@ const ProjectLevel = () => {
       }
     };
 
-    // Determine context from location.state, URL params, or sessionStorage
     let monthToUse = location.state?.month;
     let yearToUse = location.state?.year;
-    let accountIdToUse = urlAccountId; // Always from URL params for this component
+    let accountIdToUse = urlAccountId;
     let accountNameToUse = location.state?.accountName;
     let sbuToUse = location.state?.sbu;
     let projectTypeToUse = location.state?.projectType;
 
-    // Prioritize sessionStorage for all parameters if not in location.state
-    // This makes the context retrieval more robust
     if (!monthToUse) monthToUse = sessionStorage.getItem('lastFetchedProjectMonth');
     if (!yearToUse) yearToUse = sessionStorage.getItem('lastFetchedProjectYear');
-    // accountIdToUse is primarily from useParams (urlAccountId)
     if (!accountNameToUse) accountNameToUse = sessionStorage.getItem('lastFetchedProjectAccountName');
     if (!sbuToUse) sbuToUse = sessionStorage.getItem('lastFetchedProjectSbu');
     if (!projectTypeToUse) projectTypeToUse = sessionStorage.getItem('lastFetchedProjectType');
 
-    // Convert to number
     monthToUse = monthToUse ? parseInt(monthToUse, 10) : null;
     yearToUse = yearToUse ? parseInt(yearToUse, 10) : null;
 
-    // Only fetch data if all necessary context is available and it's a new context
     if (monthToUse && yearToUse && accountIdToUse) {
       if (
         monthToUse !== activeMonth ||
         yearToUse !== activeYear ||
         accountIdToUse !== activeAccountId ||
         sbuToUse !== activeSbu ||
-        projectTypeToUse !== activeProjectType ||
-        projects.length === 0 // Re-fetch if projects array is empty (e.g., first load)
+        projectTypeToUse !== activeProjectType
       ) {
         setActiveMonth(monthToUse);
         setActiveYear(yearToUse);
@@ -185,7 +231,6 @@ const ProjectLevel = () => {
         setActiveSbu(sbuToUse);
         setActiveProjectType(projectTypeToUse);
 
-        // Persist context to sessionStorage for future loads
         sessionStorage.setItem('lastFetchedProjectMonth', monthToUse.toString());
         sessionStorage.setItem('lastFetchedProjectYear', yearToUse.toString());
         sessionStorage.setItem('lastFetchedProjectAccountId', accountIdToUse);
@@ -214,45 +259,83 @@ const ProjectLevel = () => {
     activeYear,
     activeAccountId,
     activeSbu,
-    activeProjectType,
-    projects.length
+    activeProjectType
   ]);
 
-  // Initialize and destroy DataTable when projects data changes or component unmounts
+  // useEffect to handle DataTables initialization and destruction
   useEffect(() => {
     if (!loading && projects.length > 0 && tableRef.current) {
       const $tbl = $(tableRef.current);
       if ($.fn.DataTable.isDataTable($tbl)) {
         $tbl.DataTable().destroy();
       }
-      $tbl.DataTable({
+
+      // Initialize DataTable
+      const tableInstance = $tbl.DataTable({
         paging: true,
-        searching: true,
-        ordering: true,
+        searching: true, // Keep this for the global search bar
+        ordering: false, // Disabling default ordering as per original code
         info: true,
         autoWidth: false
       });
+
+      // Store the DataTables instance on the ref for later access
+      tableRef.current.dataTableInstance = tableInstance;
     }
 
+    // Cleanup function: destroy DataTable when component unmounts or data changes
     return () => {
-      if (tableRef.current) {
-        const $tbl = $(tableRef.current);
-        if ($.fn.DataTable.isDataTable($tbl)) {
-          $tbl.DataTable().destroy();
-        }
+      if (tableRef.current && tableRef.current.dataTableInstance) {
+        tableRef.current.dataTableInstance.destroy();
+        tableRef.current.dataTableInstance = null;
       }
     };
-  }, [loading, projects]);
+  }, [loading, projects]); // Re-run when loading state or projects data changes
+
+  // New useEffect to apply filters using DataTables API
+  useEffect(() => {
+    if (tableRef.current && tableRef.current.dataTableInstance) {
+      const tableInstance = tableRef.current.dataTableInstance;
+
+      // Clear all column-specific searches first to prevent cumulative filtering
+      tableInstance.columns().search('');
+
+      // Define a mapping from column keys (used in state) to DataTables column indices
+      const columnMapping = {
+        projectId: 0,
+        projectName: 1,
+        totalAssociatesCount: 2,
+        totalCompanyHours: 3,
+        totalClientHours: 4,
+        varianceHours: 5,
+        revenue: 6,
+      };
+
+      // Apply filters for each column based on the columnFilters state
+      Object.keys(columnFilters).forEach(columnKey => {
+        const filterValue = columnFilters[columnKey];
+        if (filterValue !== null) {
+          const columnIndex = columnMapping[columnKey];
+          if (columnIndex !== undefined) {
+            // DataTables search method requires a regex-like string for exact match
+            // Using "^" and "$" ensures an exact match for the cell content
+            tableInstance.column(columnIndex).search(`^${filterValue}$`, true, false);
+          }
+        }
+      });
+
+      // Redraw the table to apply all set filters
+      tableInstance.draw();
+    }
+  }, [columnFilters]); // Re-run this effect whenever columnFilters state changes
+
 
   // Define breadcrumb path for navigation
   const breadcrumbPath = [
     { name: 'PMO Dashboard', page: '' },
     { name: 'Revenue Forecast - Early View', page: 'upload' },
-    // Conditionally add SBU Level
     ...(activeSbu ? [{ name: `${activeSbu} SBU Level`, page: 'sbu', state: { month: activeMonth, year: activeYear, sbu: activeSbu } }] : []),
-    // Account Level breadcrumb
     { name: 'Account Level', page: `accounts`, state: { month: activeMonth, year: activeYear, sbu: activeSbu } },
-    // Conditionally add Project Type breadcrumb (name changed to "Project Type")
     ...(activeProjectType ? [{ name: `${activeProjectType} Project Type`, page: `accounts/${activeAccountId}/project-types`, state: { month: activeMonth, year: activeYear, sbu: activeSbu, accId: activeAccountId } }] : []),
     {
       name: `Projects (${activeAccountName})`,
@@ -334,18 +417,92 @@ const ProjectLevel = () => {
               style={{ background: 'linear-gradient(to right, #3b82f6, #2563eb)' }}
             >
               <tr>
-                <th>Project ID</th>
-                <th>Project Name</th>
-                <th>Total Associates</th>
-                <th>Company Hours</th>
-                <th>Client Hours</th>
-                <th>Variance Hours</th>
-                <th>Revenue</th>
+                {/* Each header now includes a filter dropdown */}
+                <th>
+                  Project ID
+                  <select
+                    className="form-select form-select-sm mt-1"
+                    onChange={(e) => handleFilterChange('projectId', e.target.value)}
+                    value={columnFilters.projectId || 'All'}
+                  >
+                    {getUniqueOptions('projectId').map(option => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </th>
+                <th>
+                  Project Name
+                  <select
+                    className="form-select form-select-sm mt-1"
+                    onChange={(e) => handleFilterChange('projectName', e.target.value)}
+                    value={columnFilters.projectName || 'All'}
+                  >
+                    {getUniqueOptions('projectName').map(option => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </th>
+                <th>
+                  Total Associates
+                  <select
+                    className="form-select form-select-sm mt-1"
+                    onChange={(e) => handleFilterChange('totalAssociatesCount', e.target.value)}
+                    value={columnFilters.totalAssociatesCount || 'All'}
+                  >
+                    {getUniqueOptions('totalAssociatesCount').map(option => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </th>
+                <th>Company Hours
+                  <select
+                    className="form-select form-select-sm mt-1"
+                    onChange={(e) => handleFilterChange('totalCompanyHours', e.target.value)}
+                    value={columnFilters.totalCompanyHours || 'All'}
+                  >
+                    {getUniqueOptions('totalCompanyHours').map(option => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </th>
+                <th>Client Hours
+                  <select
+                    className="form-select form-select-sm mt-1"
+                    onChange={(e) => handleFilterChange('totalClientHours', e.target.value)}
+                    value={columnFilters.totalClientHours || 'All'}
+                  >
+                    {getUniqueOptions('totalClientHours').map(option => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </th>
+                <th>Variance Hours
+                  <select
+                    className="form-select form-select-sm mt-1"
+                    onChange={(e) => handleFilterChange('varianceHours', e.target.value)}
+                    value={columnFilters.varianceHours || 'All'}
+                  >
+                    {getUniqueOptions('varianceHours').map(option => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </th>
+                <th>Revenue
+                  <select
+                    className="form-select form-select-sm mt-1"
+                    onChange={(e) => handleFilterChange('revenue', e.target.value)}
+                    value={columnFilters.revenue || 'All'}
+                  >
+                    {getUniqueOptions('revenue').map(option => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </th>
                 <th className="text-center">View</th>
               </tr>
             </thead>
             <tbody>
-              {/* Map through projects data to render table rows */}
+              {/* Map through the projects data directly, as DataTables will handle the filtering and rendering */}
               {projects.map(project => (
                 <tr key={project.projectId}>
                   <td>{project.projectId}</td>
@@ -356,7 +513,6 @@ const ProjectLevel = () => {
                   <td>{project.varianceHours}</td>
                   <td>{formatCurrency(project.revenue)}</td>
                   <td className="text-center">
-                    {/* Button to navigate to Associate Level details */}
                     <button
                       className="btn btn-sm btn-outline-primary rounded-circle"
                       onClick={() =>
